@@ -1,6 +1,9 @@
 Pohoda MCP Server
 ==================
 
+> Dokumentuj fork of [`dg/pohoda-mcp`](https://github.com/dg/pohoda-mcp) by David Grudl, MIT-licensed.
+> Packaged as a composer library for use inside Dokumentuj services. Upstream remains the source of truth.
+
 MCP server pro účetní software [Pohoda](https://www.stormware.cz/pohoda/) od Stormware.
 Komunikuje s Pohodou přes [mServer XML API](https://www.stormware.cz/pohoda/xml/mserver/).
 

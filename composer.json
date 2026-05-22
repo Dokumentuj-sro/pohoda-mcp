@@ -1,5 +1,5 @@
 {
-	"name": "dg/pohoda-mcp",
+	"name": "dokumentuj-sro/pohoda-mcp",
 	"description": "MCP server pro účetní software Pohoda. Umožňuje AI asistentům číst a vytvářet faktury, objednávky, zásoby, kontakty a další agendy přes mServer XML API.",
 	"keywords": ["mcp", "pohoda", "stormware", "mserver", "accounting", "xml-api", "ai", "invoices"],
 	"authors": [
@@ -8,14 +8,14 @@
 			"homepage": "https://davidgrudl.com"
 		}
 	],
-	"type": "project",
+	"type": "library",
 	"license": "MIT",
 	"require": {
 		"php": ">=8.1",
 		"ext-curl": "*",
 		"ext-dom": "*",
 		"ext-simplexml": "*",
-		"mcp/sdk": "*",
+		"mcp/sdk": "^0.5",
 		"symfony/finder": "^8.0"
 	},
 	"require-dev": {
