@@ -512,10 +512,21 @@ class PohodaClient
 
 	private function httpPost(string $url, string $body): string
 	{
-		return $this->httpRequest($url, [
+		return $this->httpRequest($url, $this->xmlHeaders(), $body);
+	}
+
+
+	/**
+	 * Headers sent with every XML POST. Override in a subclass to add extra
+	 * headers (e.g. a proxy/authorization header) without modifying the package.
+	 * @return list<string>
+	 */
+	protected function xmlHeaders(): array
+	{
+		return [
 			'Content-Type: text/xml',
 			'STW-Authorization: ' . $this->authHeader,
-		], $body);
+		];
 	}
 
 
