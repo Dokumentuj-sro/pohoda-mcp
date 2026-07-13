@@ -10,6 +10,9 @@ final class ResponseItem
 	public readonly string $id;
 	public readonly string $state;
 
+	/** mServer's human-readable reason on a rejected item (`note=` attribute), '' when absent. */
+	public readonly string $note;
+
 	/** @var array<string, mixed> */
 	public readonly array $data;
 
@@ -18,6 +21,7 @@ final class ResponseItem
 	{
 		$this->id = $node->getAttribute('id') ?: '';
 		$this->state = $node->getAttribute('state') ?: 'unknown';
+		$this->note = $node->getAttribute('note') ?: '';
 
 		$data = [];
 		foreach ($node->childNodes as $child) {
@@ -44,6 +48,7 @@ final class ResponseItem
 		return [
 			'id' => $this->id,
 			'state' => $this->state,
+			'note' => $this->note,
 			'data' => $this->data,
 		];
 	}

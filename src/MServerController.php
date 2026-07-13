@@ -9,10 +9,24 @@ namespace DG\Pohoda;
  */
 final class MServerController
 {
+	/** @var \Closure(string): void */
+	private \Closure $commandRunner;
+
+
+	/**
+	 * @param bool $closeApp also close the Pohoda.exe GUI after stopping the
+	 *                       listener (full-kill teardown); graceful close only —
+	 *                       a force-kill risks MDB corruption
+	 * @param \Closure(string): void|null $commandRunner injectable command seam
+	 *                       so tests can record commands without a real pohoda.exe
+	 */
 	public function __construct(
 		private readonly string $exePath,
 		private readonly string $configName,
+		private readonly bool $closeApp = false,
+		?\Closure $commandRunner = null,
 	) {
+		$this->commandRunner = $commandRunner ?? $this->defaultCommandRunner();
 	}
 
 
@@ -46,14 +60,22 @@ final class MServerController
 
 
 	/**
-	 * Sends a stop command to the mServer (non-blocking, fire-and-forget).
-	 * Does not wait for the process to terminate.
+	 * Sends a stop command to the mServer (non-blocking, fire-and-forget), and
+	 * with $closeApp also closes the Pohoda.exe GUI afterwards so nothing stays
+	 * resident between jobs. Does not wait for the process to terminate.
 	 *
 	 * @throws \RuntimeException on launch failure of pohoda.exe
 	 */
 	public function stop(): void
 	{
 		$this->run('stop');
+
+		if ($this->closeApp) {
+			// Graceful close — deliberately no /F: a force-kill can corrupt
+			// the company MDB; Pohoda must flush and exit on its own.
+			$exe = preg_replace('~^.*[\\\\/]~', '', $this->exePath);
+			($this->commandRunner)(sprintf('taskkill /IM "%s"', $exe));
+		}
 	}
 
 
@@ -63,13 +85,20 @@ final class MServerController
 	 */
 	private function run(string $httpCommand): void
 	{
-		$cmd = sprintf(
+		($this->commandRunner)(sprintf(
 			'start "" /B "%s" /HTTP %s "%s"',
 			$this->exePath,
 			$httpCommand,
 			$this->configName,
-		);
-		$pipe = popen($cmd, 'r') ?: throw new \RuntimeException('Failed to execute: ' . $cmd);
-		pclose($pipe);
+		));
+	}
+
+
+	private function defaultCommandRunner(): \Closure
+	{
+		return function (string $cmd): void {
+			$pipe = popen($cmd, 'r') ?: throw new \RuntimeException('Failed to execute: ' . $cmd);
+			pclose($pipe);
+		};
 	}
 }
