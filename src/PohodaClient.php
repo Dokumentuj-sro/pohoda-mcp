@@ -342,8 +342,7 @@ class PohodaClient
 	 */
 	public function sendRawXml(string $innerXml, string $note = ''): Response
 	{
-		$xml = $this->xml->buildRaw($innerXml, $note);
-		return new Response($this->httpPost($this->url . '/xml', $xml));
+		return $this->postXml($this->xml->buildRaw($innerXml, $note));
 	}
 
 
@@ -357,7 +356,18 @@ class PohodaClient
 	 */
 	private function send(string $rootElement, string $version, array $data, string $note, array $rootAttrs = []): Response
 	{
-		$xml = $this->xml->build($rootElement, $version, $data, $note, $rootAttrs);
+		return $this->postXml($this->xml->build($rootElement, $version, $data, $note, $rootAttrs));
+	}
+
+
+	/**
+	 * Deliver one built dataPack and return the parsed response. Protected so a
+	 * downstream subclass can swap the transport (e.g. `pohoda.exe /XML` batch
+	 * CLI) while inheriting every agenda mapping unchanged; the default posts
+	 * to mServer exactly as before.
+	 */
+	protected function postXml(string $xml): Response
+	{
 		return new Response($this->httpPost($this->url . '/xml', $xml));
 	}
 
