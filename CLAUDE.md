@@ -19,7 +19,7 @@ MCP server pro účetní software Pohoda (mServer XML API).
 - Požadavky zabaleny v `<dat:dataPack>` obálce s ICO firmy
 - Odpovědi v `<rsp:responsePack>` s atributem `state="ok"|"error"`
 - XML namespace schémata: `http://www.stormware.cz/schema/version_2/*.xsd`
-- Kódování: Windows-1250 v XML deklaraci
+- Kódování: UTF-8 (deklarace odpovídá bajtům z XMLWriteru; Pohoda přijímá UTF-8 dataPacky přes mServer i `pohoda.exe /XML`; odpovědi mServer vrací ve Windows-1250)
 
 ## Schéma a agendy
 

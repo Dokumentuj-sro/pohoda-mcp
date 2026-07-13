@@ -55,7 +55,10 @@ final class XmlBuilder
 
 		$this->w = new \XMLWriter;
 		$this->w->openMemory();
-		$this->w->startDocument('1.0', 'Windows-1250');
+		// XMLWriter emits UTF-8 bytes, so the declaration must say UTF-8 —
+		// Pohoda accepts UTF-8-declared dataPacks (mServer i pohoda.exe /XML);
+		// a Windows-1250 declaration over UTF-8 bytes breaks file consumers.
+		$this->w->startDocument('1.0', 'UTF-8');
 
 		// <dat:dataPack>
 		$this->w->startElementNs('dat', 'dataPack', null);
@@ -98,7 +101,7 @@ final class XmlBuilder
 	public function buildRaw(string $innerXml, string $note = ''): string
 	{
 		$id = sprintf('%08d', random_int(1, 99_999_999));
-		return '<?xml version="1.0" encoding="Windows-1250"?>'
+		return '<?xml version="1.0" encoding="UTF-8"?>'
 			. '<dat:dataPack'
 			. ' xmlns:dat="http://www.stormware.cz/schema/version_2/data.xsd"'
 			. ' xmlns:typ="http://www.stormware.cz/schema/version_2/type.xsd"'

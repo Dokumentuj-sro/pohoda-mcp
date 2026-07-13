@@ -11,10 +11,26 @@ $builder = new XmlBuilder('12345678', 'Test');
 
 test('produces valid XML with encoding', function () use ($builder) {
 	$xml = $builder->build('inv:invoice', '2.0', ['inv:invoiceHeader' => ['inv:invoiceType' => 'issuedInvoice']]);
-	Assert::match('<?xml version="1.0" encoding="Windows-1250"?>%A%', $xml);
+	Assert::match('<?xml version="1.0" encoding="UTF-8"?>%A%', $xml);
 
 	$doc = new DOMDocument;
 	Assert::true($doc->loadXML($xml));
+});
+
+
+test('declaration matches the actual bytes (UTF-8, diacritics intact)', function () use ($builder) {
+	// XMLWriter emits UTF-8; the declaration must say so — a Windows-1250
+	// declaration over UTF-8 bytes breaks file consumers (pohoda.exe /XML).
+	$xml = $builder->build('inv:invoice', '2.0', [
+		'inv:invoiceHeader' => ['inv:text' => 'Údržba plošin — červenec'],
+	]);
+	Assert::match('<?xml version="1.0" encoding="UTF-8"?>%A%', $xml);
+	Assert::true(mb_check_encoding($xml, 'UTF-8'));
+	Assert::contains('Údržba plošin — červenec', $xml);
+
+	$raw = $builder->buildRaw('<inv:invoice version="2.0"><inv:invoiceHeader><inv:text>Údržba plošin</inv:text></inv:invoiceHeader></inv:invoice>');
+	Assert::match('<?xml version="1.0" encoding="UTF-8"?>%A%', $raw);
+	Assert::true(mb_check_encoding($raw, 'UTF-8'));
 });
 
 
