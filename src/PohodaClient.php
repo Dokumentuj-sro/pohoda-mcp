@@ -492,6 +492,26 @@ class PohodaClient
 	private function httpRequest(string $url, array $headers, ?string $postBody = null): string
 	{
 		$this->ensureRunning();
+		return $this->transport($url, $headers, $postBody);
+	}
+
+
+	/**
+	 * One HTTP round-trip to mServer, and the only place this package touches the
+	 * network. Protected so a host can swap the wire call wholesale — a Laravel
+	 * app can route it through the `Http` facade and get `Http::fake()`,
+	 * `Http::preventStrayRequests()` and request instrumentation over every
+	 * Pohoda call for free. The default stays dependency-free curl, so the
+	 * standalone MCP server still runs on nothing but ext-curl.
+	 *
+	 * Returns the response body; throws `\RuntimeException` on a transport
+	 * failure or any non-200 status. An override must keep that contract —
+	 * `Response` parsing and the mServer autostart both assume it.
+	 *
+	 * @param list<string> $headers
+	 */
+	protected function transport(string $url, array $headers, ?string $postBody = null): string
+	{
 		$ch = curl_init($url);
 		$opts = [
 			CURLOPT_RETURNTRANSFER => true,
