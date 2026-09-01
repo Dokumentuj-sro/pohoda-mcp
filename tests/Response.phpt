@@ -104,3 +104,35 @@ test('toArray() produces expected structure', function () {
 	Assert::count(1, $arr['items']);
 	Assert::same('x1', $arr['items'][0]['id']);
 });
+
+
+test('retains the source xml byte for byte, including a payload the parse drops', function () {
+	// Windows-1250 declaration, an attribute order mServer chose, a note the
+	// parse does not surface and trailing whitespace: everything a relay must
+	// hand back untouched so the far side can rebuild an identical Response.
+	$xml = "<?xml version=\"1.0\" encoding=\"Windows-1250\"?>\r\n"
+		. '<rsp:responsePack version="2.0" id="t1" state="ok" programVersion="13000"'
+		. ' xmlns:rsp="http://www.stormware.cz/schema/version_2/response.xsd"'
+		. ' xmlns:lst="http://www.stormware.cz/schema/version_2/list.xsd">'
+		. '<rsp:responsePackItem version="2.0" id="item01" state="ok">'
+		. '<lst:listAccount><lst:account><lst:id>7</lst:id></lst:account></lst:listAccount>'
+		. '</rsp:responsePackItem>'
+		. "</rsp:responsePack>\n";
+
+	$r = new Response($xml);
+
+	Assert::same($xml, $r->xml);
+	// The parsed view stays exactly as it was — the raw copy is additive.
+	Assert::true($r->isOk());
+	Assert::same('13000', $r->programVersion);
+	Assert::count(1, $r->items);
+	Assert::same(['state' => 'ok', 'programVersion' => '13000', 'items' => [$r->items[0]->toArray()]], $r->toArray());
+});
+
+
+test('retains unparseable source xml too', function () {
+	$r = new Response('not xml at all');
+
+	Assert::same('not xml at all', $r->xml);
+	Assert::same('error', $r->state);
+});

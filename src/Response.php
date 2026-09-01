@@ -10,9 +10,19 @@ final class Response
 	public readonly string $state;
 	public readonly string $programVersion;
 
+	/**
+	 * The mServer answer exactly as it arrived, before any parsing. Kept so a
+	 * transport that only relays bytes (the Dokumentuj Bridge's `list_xml`
+	 * read) can hand the untouched responsePack back and let the far side
+	 * rebuild the identical Response — the parsed view here is lossy by
+	 * design and cannot be re-serialised into the original document.
+	 */
+	public readonly string $xml;
+
 
 	public function __construct(string $xml)
 	{
+		$this->xml = $xml;
 		$doc = new \DOMDocument;
 		$root = @$doc->loadXML($xml) ? $doc->documentElement : null;
 		$this->state = $root?->getAttribute('state') ?: ($root ? 'unknown' : 'error');
