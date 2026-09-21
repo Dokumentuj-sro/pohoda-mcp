@@ -43,3 +43,14 @@ test('sendRawXml() rides the same hook', function () {
 	Assert::true($response->isOk());
 	Assert::contains('<inv:invoice version="2.0"/>', $client->sentXml);
 });
+
+
+test('sendRawXml() carries the period onto the envelope', function () {
+	$client = new CapturingTransportClient('http://localhost:8080', '12345678', 'user', 'pass');
+
+	$client->sendRawXml('<inv:invoice version="2.0"/>', 'zapis', 'following');
+	Assert::contains('period="following"', $client->sentXml);
+
+	$client->sendRawXml('<inv:invoice version="2.0"/>', 'zapis');
+	Assert::false(str_contains($client->sentXml, 'period='));
+});

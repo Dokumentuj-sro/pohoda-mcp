@@ -28,6 +28,15 @@ final class XmlBuilder
 		'lAcv' => 'http://www.stormware.cz/schema/version_2/list_activity.xsd',
 	];
 
+	/**
+	 * data.xsd `dat:dataPack/@period`: "Pokud nebude atribut použit, bude XML
+	 * import dat proveden do aktuálně nastaveného účetního období přihlášeného
+	 * uživatele." A unit that has opened its přechodné období keeps next year's
+	 * číselné řady under `following`, so a doklad numbered out of that období
+	 * has to say so or Pohoda refuses it against the běžné období's řady.
+	 */
+	private const Periods = ['current', 'following'];
+
 	private \XMLWriter $w;
 
 
@@ -42,6 +51,7 @@ final class XmlBuilder
 	 * Build complete dataPack XML with one dataPackItem.
 	 * @param array<string, mixed> $data
 	 * @param array<string, string> $rootAttrs
+	 * @param ?string $period  see {@see Periods}
 	 */
 	public function build(
 		string $rootElement,
@@ -49,8 +59,10 @@ final class XmlBuilder
 		array $data,
 		string $note = '',
 		array $rootAttrs = [],
+		?string $period = null,
 	): string
 	{
+		self::checkPeriod($period);
 		$id = sprintf('%08d', random_int(1, 99_999_999));
 
 		$this->w = new \XMLWriter;
@@ -67,6 +79,9 @@ final class XmlBuilder
 		$this->w->writeAttribute('application', $this->application);
 		$this->w->writeAttribute('version', '2.0');
 		$this->w->writeAttribute('note', $note);
+		if ($period !== null) {
+			$this->w->writeAttribute('period', $period);
+		}
 
 		foreach (self::Namespaces as $prefix => $uri) {
 			$this->w->writeAttributeNs('xmlns', $prefix, null, $uri);
@@ -97,9 +112,11 @@ final class XmlBuilder
 
 	/**
 	 * Build dataPack XML from raw inner XML string (for sendRawXml).
+	 * @param ?string $period  see {@see Periods}
 	 */
-	public function buildRaw(string $innerXml, string $note = ''): string
+	public function buildRaw(string $innerXml, string $note = '', ?string $period = null): string
 	{
+		self::checkPeriod($period);
 		$id = sprintf('%08d', random_int(1, 99_999_999));
 		return '<?xml version="1.0" encoding="UTF-8"?>'
 			. '<dat:dataPack'
@@ -109,11 +126,24 @@ final class XmlBuilder
 			. ' ico="' . htmlspecialchars($this->ico) . '"'
 			. ' application="' . htmlspecialchars($this->application) . '"'
 			. ' version="2.0"'
-			. ' note="' . htmlspecialchars($note) . '">'
+			. ' note="' . htmlspecialchars($note) . '"'
+			. ($period === null ? '' : ' period="' . $period . '"')
+			. '>'
 			. '<dat:dataPackItem id="' . $id . '" version="2.0">'
 			. $innerXml
 			. '</dat:dataPackItem>'
 			. '</dat:dataPack>';
+	}
+
+
+	/**
+	 * @throws \InvalidArgumentException  on a period data.xsd does not define
+	 */
+	private static function checkPeriod(?string $period): void
+	{
+		if ($period !== null && !in_array($period, self::Periods, true)) {
+			throw new \InvalidArgumentException(sprintf('Period must be "current" or "following", "%s" given.', $period));
+		}
 	}
 
 
