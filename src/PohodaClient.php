@@ -339,10 +339,13 @@ class PohodaClient
 
 	/**
 	 * Send raw XML string as dataPackItem content.
+	 *
+	 * $period names the účetní období the import lands in; null leaves it to the
+	 * logged-in user's currently open one, which is the pre-existing behaviour.
 	 */
-	public function sendRawXml(string $innerXml, string $note = ''): Response
+	public function sendRawXml(string $innerXml, string $note = '', ?string $period = null): Response
 	{
-		return $this->postXml($this->xml->buildRaw($innerXml, $note));
+		return $this->postXml($this->xml->buildRaw($innerXml, $note, $period));
 	}
 
 
@@ -353,10 +356,11 @@ class PohodaClient
 	 * Build and send a structured request.
 	 * @param array<string, mixed> $data
 	 * @param array<string, string> $rootAttrs  Extra attributes on the root element
+	 * @param ?string $period  the účetní období to import into; null = the user's open one
 	 */
-	private function send(string $rootElement, string $version, array $data, string $note, array $rootAttrs = []): Response
+	private function send(string $rootElement, string $version, array $data, string $note, array $rootAttrs = [], ?string $period = null): Response
 	{
-		return $this->postXml($this->xml->build($rootElement, $version, $data, $note, $rootAttrs));
+		return $this->postXml($this->xml->build($rootElement, $version, $data, $note, $rootAttrs, $period));
 	}
 
 

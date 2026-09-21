@@ -131,3 +131,33 @@ test('handles numeric keys for array items', function () use ($builder) {
 	]);
 	Assert::match('%A%<ord:orderItem>%A?%Item 1%A?%</ord:orderItem>%A?%<ord:orderItem>%A?%Item 2%A?%</ord:orderItem>%A%', $xml);
 });
+
+
+test('omits @period by default, writes it when asked', function () use ($builder) {
+	// data.xsd: without the attribute the import lands in the účetní období the
+	// logged-in user currently has open. A unit whose přechodné období holds next
+	// year's číselné řady needs `following` for a next-year doklad.
+	$default = $builder->build('inv:invoice', '2.0', []);
+	Assert::false(str_contains($default, 'period='));
+
+	$following = $builder->build('inv:invoice', '2.0', [], '', [], 'following');
+	Assert::match('%A%<dat:dataPack %A%period="following"%A%<dat:dataPackItem%A%', $following);
+
+	$raw = $builder->buildRaw('<inv:invoice version="2.0"/>', '', 'following');
+	Assert::contains('period="following"', $raw);
+	Assert::false(str_contains($builder->buildRaw('<inv:invoice version="2.0"/>'), 'period='));
+});
+
+
+test('refuses a period data.xsd does not define', function () use ($builder) {
+	Assert::exception(
+		fn() => $builder->build('inv:invoice', '2.0', [], '', [], 'next-year'),
+		InvalidArgumentException::class,
+		'Period must be "current" or "following", "next-year" given.',
+	);
+	Assert::exception(
+		fn() => $builder->buildRaw('<inv:invoice version="2.0"/>', '', 'next-year'),
+		InvalidArgumentException::class,
+		'Period must be "current" or "following", "next-year" given.',
+	);
+});
