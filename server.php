@@ -1,6 +1,13 @@
 <?php declare(strict_types=1);
 
-require __DIR__ . '/vendor/autoload.php';
+// Standalone: own vendor/. Installed as a dependency: the host's vendor/.
+for ($dir = __DIR__; !is_file($dir . '/vendor/autoload.php'); $dir = dirname($dir)) {
+	if ($dir === dirname($dir)) {
+		fwrite(STDERR, "vendor/autoload.php not found; run composer install.\n");
+		exit(1);
+	}
+}
+require $dir . '/vendor/autoload.php';
 
 use DG\Pohoda\McpTools;
 use DG\Pohoda\MServerController;
