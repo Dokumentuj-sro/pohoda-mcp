@@ -6,8 +6,13 @@ use function is_array, is_bool, is_int, is_scalar, is_string, sprintf;
 
 
 /**
- * Builds Pohoda XML requests using XMLWriter.
+ * Builds Pohoda XML requests as plain strings.
  * Data is specified as nested PHP arrays, written recursively.
+ *
+ * Deliberately not XMLWriter: the static PHP that ships inside the Accounting
+ * Bridge is built without ext-xmlwriter, and every mServer request died there
+ * with `Class "XMLWriter" not found`. The escaping below is libxml's, so the
+ * bytes match what XMLWriter produced (tests/XmlBuilder.phpt).
  */
 final class XmlBuilder
 {
@@ -27,8 +32,6 @@ final class XmlBuilder
 		'lCen' => 'http://www.stormware.cz/schema/version_2/list_centre.xsd',
 		'lAcv' => 'http://www.stormware.cz/schema/version_2/list_activity.xsd',
 	];
-
-	private \XMLWriter $w;
 
 
 	public function __construct(
@@ -53,45 +56,19 @@ final class XmlBuilder
 	{
 		$id = sprintf('%08d', random_int(1, 99_999_999));
 
-		$this->w = new \XMLWriter;
-		$this->w->openMemory();
-		// XMLWriter emits UTF-8 bytes, so the declaration must say UTF-8 —
-		// Pohoda accepts UTF-8-declared dataPacks (mServer i pohoda.exe /XML);
-		// a Windows-1250 declaration over UTF-8 bytes breaks file consumers.
-		$this->w->startDocument('1.0', 'UTF-8');
-
-		// <dat:dataPack>
-		$this->w->startElementNs('dat', 'dataPack', null);
-		$this->w->writeAttribute('id', $id);
-		$this->w->writeAttribute('ico', $this->ico);
-		$this->w->writeAttribute('application', $this->application);
-		$this->w->writeAttribute('version', '2.0');
-		$this->w->writeAttribute('note', $note);
-
+		$packAttrs = ['id' => $id, 'ico' => $this->ico, 'application' => $this->application, 'version' => '2.0', 'note' => $note];
 		foreach (self::Namespaces as $prefix => $uri) {
-			$this->w->writeAttributeNs('xmlns', $prefix, null, $uri);
+			$packAttrs['xmlns:' . $prefix] = $uri;
 		}
 
-		// <dat:dataPackItem>
-		$this->w->startElementNs('dat', 'dataPackItem', null);
-		$this->w->writeAttribute('id', $id);
-		$this->w->writeAttribute('version', '2.0');
-
-		// Root element (e.g. inv:invoice)
-		[$prefix, $name] = explode(':', $rootElement);
-		$this->w->startElementNs($prefix, $name, null);
-		$this->w->writeAttribute('version', $version);
-		foreach ($rootAttrs as $k => $v) {
-			$this->w->writeAttribute($k, $v);
-		}
-		$this->writeData($data);
-		$this->w->endElement();
-
-		$this->w->endElement(); // dataPackItem
-		$this->w->endElement(); // dataPack
-		$this->w->endDocument();
-
-		return $this->w->outputMemory();
+		// UTF-8 bytes, so the declaration must say UTF-8 — Pohoda accepts
+		// UTF-8-declared dataPacks (mServer i pohoda.exe /XML); a Windows-1250
+		// declaration over UTF-8 bytes breaks file consumers.
+		return '<?xml version="1.0" encoding="UTF-8"?>' . "\n"
+			. self::element('dat:dataPack', $packAttrs,
+				self::element('dat:dataPackItem', ['id' => $id, 'version' => '2.0'],
+					self::element($rootElement, ['version' => $version] + $rootAttrs, $this->writeData($data))))
+			. "\n";
 	}
 
 
@@ -121,8 +98,9 @@ final class XmlBuilder
 	 * Recursively write nested data structure as XML elements.
 	 * @param array<int|string, mixed> $data
 	 */
-	private function writeData(array $data): void
+	private function writeData(array $data): string
 	{
+		$xml = '';
 		foreach ($data as $key => $value) {
 			if ($value === null || $value === '') {
 				continue;
@@ -131,35 +109,65 @@ final class XmlBuilder
 			// Numeric key = wrapper array, recurse
 			if (is_int($key)) {
 				if (is_array($value)) {
-					$this->writeData($value);
+					$xml .= $this->writeData($value);
 				}
 				continue;
 			}
 
-			[$prefix, $name] = explode(':', $key);
-			$this->w->startElementNs($prefix, $name, null);
-
+			$attrs = [];
+			$content = '';
 			if (is_array($value)) {
 				// Check for '@attr' keys = attributes
 				foreach ($value as $k => $v) {
 					if (is_string($k) && str_starts_with($k, '@') && is_scalar($v)) {
-						$this->w->writeAttribute(substr($k, 1), (string) $v);
+						$attrs[substr($k, 1)] = (string) $v;
 					}
 				}
 				// Write child elements (skip @attr keys)
 				$children = array_filter($value, fn($k) => !is_string($k) || !str_starts_with($k, '@'), ARRAY_FILTER_USE_KEY);
 				if ($children) {
-					$this->writeData($children);
+					$content = $this->writeData($children);
 				}
 			} elseif ($value instanceof \DateTimeInterface) {
-				$this->w->text($value->format('Y-m-d'));
+				$content = self::escapeText($value->format('Y-m-d'));
 			} elseif (is_bool($value)) {
-				$this->w->text($value ? 'true' : 'false');
+				$content = $value ? 'true' : 'false';
 			} elseif (is_scalar($value)) {
-				$this->w->text((string) $value);
+				$content = self::escapeText((string) $value);
 			}
 
-			$this->w->endElement();
+			$xml .= self::element($key, $attrs, $content);
 		}
+
+		return $xml;
+	}
+
+
+	/**
+	 * One element; empty content self-closes, as XMLWriter's endElement() did.
+	 * @param array<string, string> $attrs
+	 */
+	private static function element(string $name, array $attrs, string $content): string
+	{
+		$xml = '<' . $name;
+		foreach ($attrs as $k => $v) {
+			$xml .= ' ' . $k . '="' . self::escapeAttribute((string) $v) . '"';
+		}
+
+		return $content === '' ? $xml . '/>' : $xml . '>' . $content . '</' . $name . '>';
+	}
+
+
+	/** libxml's xmlEncodeSpecialChars, which XMLWriter::text() used. */
+	private static function escapeText(string $text): string
+	{
+		return strtr($text, ['&' => '&amp;', '<' => '&lt;', '>' => '&gt;', '"' => '&quot;', "\r" => '&#13;']);
+	}
+
+
+	/** libxml's attribute serialisation, which XMLWriter::writeAttribute() used. */
+	private static function escapeAttribute(string $text): string
+	{
+		return strtr($text, ['&' => '&amp;', '<' => '&lt;', '>' => '&gt;', '"' => '&quot;', "\n" => '&#10;', "\r" => '&#13;', "\t" => '&#9;']);
 	}
 }

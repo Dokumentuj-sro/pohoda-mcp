@@ -7,7 +7,7 @@ MCP server pro účetní software Pohoda (mServer XML API).
 - `server.php` -- vstupní bod; skládá MCP server (`mcp/sdk`) přes inline anonymní `Psr\Container` wrapper, který MCP serveru při každém `get(McpTools::class)` dodá `McpTools` s injektovaným sdíleným `PohodaClient`. Attribute discovery běží nad `src/`. Pokud jsou nastaveny env `POHODA_EXE_PATH` a `POHODA_CONFIG_NAME`, předá se `PohodaClient`u `MServerController` pro lazy autostart mServeru.
 - `src/McpTools.php` -- tenký MCP adaptér s `#[McpTool]` atributy, mapuje MCP parametry na PohodaClient metody
 - `src/PohodaClient.php` -- HTTP klient pro mServer, doménové metody (createInvoice, createStock, ...), XML stavba přes XmlBuilder. Volitelně drží `MServerController` (přes `setController()`) a před každým HTTP requestem ověřuje, že mServer běží — pokud ne, sám ho přes controller spustí. Při destrukci ho zase zastaví, ale jen pokud ho sám startoval.
-- `src/XmlBuilder.php` -- staví Pohoda XML požadavky pomocí XMLWriter, data jako vnořené PHP pole
+- `src/XmlBuilder.php` -- staví Pohoda XML požadavky jako řetězec (ne XMLWriter — statické PHP v Accounting Bridge nemá ext-xmlwriter), data jako vnořené PHP pole
 - `src/Response.php` -- parsovaná odpověď z mServeru s `isOk()`, `toArray()`, seznam `ResponseItem`
 - `src/ResponseItem.php` -- jeden záznam z odpovědi s `id`, `state`, `data`, `isOk()`
 - `src/MServerController.php` -- spouští/zastavuje Pohoda mServer přes `pohoda.exe /HTTP`, non-blocking launch + polling `PohodaClient::getStatus()`
@@ -19,7 +19,7 @@ MCP server pro účetní software Pohoda (mServer XML API).
 - Požadavky zabaleny v `<dat:dataPack>` obálce s ICO firmy
 - Odpovědi v `<rsp:responsePack>` s atributem `state="ok"|"error"`
 - XML namespace schémata: `http://www.stormware.cz/schema/version_2/*.xsd`
-- Kódování: UTF-8 (deklarace odpovídá bajtům z XMLWriteru; Pohoda přijímá UTF-8 dataPacky přes mServer i `pohoda.exe /XML`; odpovědi mServer vrací ve Windows-1250)
+- Kódování: UTF-8 (deklarace odpovídá emitovaným bajtům; Pohoda přijímá UTF-8 dataPacky přes mServer i `pohoda.exe /XML`; odpovědi mServer vrací ve Windows-1250)
 
 ## Schéma a agendy
 
