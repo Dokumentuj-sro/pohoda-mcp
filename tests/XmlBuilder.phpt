@@ -131,3 +131,28 @@ test('handles numeric keys for array items', function () use ($builder) {
 	]);
 	Assert::match('%A%<ord:orderItem>%A?%Item 1%A?%</ord:orderItem>%A?%<ord:orderItem>%A?%Item 2%A?%</ord:orderItem>%A%', $xml);
 });
+
+
+test('emits exactly the bytes XMLWriter did, without needing ext-xmlwriter', function () use ($builder) {
+	// The Accounting Bridge's static PHP has no ext-xmlwriter; these bytes are
+	// what XMLWriter produced for the same input, escaping included.
+	$xml = $builder->build('lst:listInvoiceRequest', '2.0', [
+		'lst:requestInvoice' => ['@note' => "a\"b\n\tc", 'ftr:filter' => ['ftr:id' => 7]],
+		'lst:flag' => false,
+		'lst:empty' => [],
+		'lst:text' => "x & <y> \"z\" 'w'\r",
+	], rootAttrs: ['invoiceType' => 'receivedInvoice']);
+
+	Assert::same(
+		'<?xml version="1.0" encoding="UTF-8"?>' . "\n"
+		. '<dat:dataPack id="X" ico="12345678" application="Test" version="2.0" note=""'
+		. ' xmlns:dat="http://www.stormware.cz/schema/version_2/data.xsd" xmlns:typ="http://www.stormware.cz/schema/version_2/type.xsd" xmlns:ftr="http://www.stormware.cz/schema/version_2/filter.xsd" xmlns:inv="http://www.stormware.cz/schema/version_2/invoice.xsd" xmlns:ord="http://www.stormware.cz/schema/version_2/order.xsd" xmlns:adb="http://www.stormware.cz/schema/version_2/addressbook.xsd" xmlns:stk="http://www.stormware.cz/schema/version_2/stock.xsd" xmlns:prn="http://www.stormware.cz/schema/version_2/print.xsd" xmlns:lst="http://www.stormware.cz/schema/version_2/list.xsd" xmlns:lStk="http://www.stormware.cz/schema/version_2/list_stock.xsd" xmlns:lAdb="http://www.stormware.cz/schema/version_2/list_addBook.xsd" xmlns:lCon="http://www.stormware.cz/schema/version_2/list_contract.xsd" xmlns:lCen="http://www.stormware.cz/schema/version_2/list_centre.xsd" xmlns:lAcv="http://www.stormware.cz/schema/version_2/list_activity.xsd">'
+		. '<dat:dataPackItem id="X" version="2.0">'
+		. '<lst:listInvoiceRequest version="2.0" invoiceType="receivedInvoice">'
+		. '<lst:requestInvoice note="a&quot;b&#10;&#9;c"><ftr:filter><ftr:id>7</ftr:id></ftr:filter></lst:requestInvoice>'
+		. '<lst:flag>false</lst:flag><lst:empty/>'
+		. '<lst:text>x &amp; &lt;y&gt; &quot;z&quot; \'w\'&#13;</lst:text>'
+		. '</lst:listInvoiceRequest></dat:dataPackItem></dat:dataPack>' . "\n",
+		preg_replace('/ id="\d{8}"/', ' id="X"', $xml),
+	);
+});
