@@ -94,6 +94,7 @@ final class MServerController
 	}
 
 
+	/** @return \Closure(string): void */
 	private function defaultCommandRunner(): \Closure
 	{
 		return function (string $cmd): void {

@@ -15,7 +15,25 @@ class McpTools
 
 	private const DocumentAgendas = [
 		'invoice', 'order', 'voucher', 'bank', 'contract', 'intDoc', 'offer', 'enquiry',
-		'vydejka', 'prijemka', 'prodejka', 'prevodka', 'vyroba', 'accountancy',
+		'vydejka', 'prijemka', 'prodejka', 'prevodka', 'vyroba', 'accountancy', 'service', 'movement',
+	];
+
+	private const DocumentTypes = [
+		'', 'issuedInvoice', 'issuedCreditNotice', 'issuedDebitNote', 'issuedAdvanceInvoice', 'issuedProformaInvoice',
+		'issuedCorrectiveTax', 'receivedInvoice', 'receivedCreditNotice', 'receivedDebitNote', 'receivedAdvanceInvoice',
+		'receivedProformaInvoice', 'receivedCorrectiveTax', 'receivable', 'commitment', 'penalty',
+		'receivedOrder', 'issuedOrder', 'receivedOffer', 'issuedOffer', 'receivedEnquiry', 'issuedEnquiry',
+		'receipt', 'expense', 'income',
+	];
+
+	private const Codebooks = [
+		'store', 'bankAccount', 'cashRegister', 'numericalSeries', 'centre', 'activity', 'payment',
+		'storage', 'category', 'accountingUnit', 'classificationVAT',
+	];
+
+	private const WritableAgendas = [
+		'invoice', 'order', 'voucher', 'bank', 'intDoc', 'offer', 'enquiry', 'contract', 'service',
+		'prijemka', 'vydejka', 'prodejka', 'prevodka', 'vyroba',
 	];
 
 	private const DefaultListLimit = 100;
@@ -64,7 +82,8 @@ class McpTools
 	 * List transactional documents (invoices, orders, vouchers, etc.) from Pohoda with optional filtering.
 	 * For invoice agenda the invoiceType parameter is required.
 	 * For stock/inventory items use list_stock; for the address book use list_contacts.
-	 * Niche agendas (centre, activity, store, bankAccount, cashRegister, numericalSeries) are reachable only via raw_xml.
+	 * Codebooks (centre, activity, store, bankAccount, cashRegister, numericalSeries, ...) are read with list_codebook.
+	 * The type parameter narrows invoice (required there), order, offer, enquiry, voucher and bank agendas.
 	 *
 	 * @param int $id Filter by record ID
 	 * @param string $dateFrom Filter from date (YYYY-MM-DD)
@@ -83,7 +102,7 @@ class McpTools
 	public function listDocuments(
 		#[Schema(enum: self::DocumentAgendas)]
 		string $agenda,
-		#[Schema(enum: ['', 'issuedInvoice', 'receivedInvoice'], description: 'Required for invoice agenda')]
+		#[Schema(enum: self::DocumentTypes, description: 'Document sub-type; required for invoice agenda')]
 		string $invoiceType = '',
 		int $id = 0,
 		string $dateFrom = '',
@@ -432,6 +451,163 @@ class McpTools
 
 
 	/**
+	 * List a Pohoda codebook: stores, bank accounts, cash registers, numerical series, centres, activities,
+	 * payment methods, storages, categories, accounting units or VAT classifications.
+	 * Use the returned IDS values in create_document and update_record fields.
+	 *
+	 * @param int $limit Max records to return (client-side truncation, default 100)
+	 */
+	#[McpTool(
+		name: 'list_codebook',
+		title: 'List Pohoda codebook',
+		annotations: new ToolAnnotations(readOnlyHint: true, openWorldHint: true),
+	)]
+	public function listCodebook(
+		#[Schema(enum: self::Codebooks)]
+		string $codebook,
+		int $limit = self::DefaultListLimit,
+	): string
+	{
+		return self::jsonList($this->assertOk($this->client->listRecords($codebook, [])), $limit);
+	}
+
+
+	/**
+	 * Create a document in any Pohoda agenda: invoice (all sub-types incl. credit notes, advances, receivables),
+	 * order, voucher (cash), bank, internal document, offer, enquiry, contract, service, receipt/issue/sales/transfer
+	 * notes and production. Link the partner by partnerId, or give partnerName/partnerIco/address inline.
+	 * mServer rejects a field the agenda does not define and the error names it.
+	 *
+	 * @param string $type Sub-type: required for invoice, order, offer, enquiry, voucher (receipt|expense) and bank (receipt|expense)
+	 * @param list<array<string, mixed>> $items Line items (omit for contract)
+	 * @param string $number Requested document number (Pohoda assigns from the series when empty)
+	 * @param string $date Document date (YYYY-MM-DD); for bank the payment date
+	 * @param string $text Document text
+	 * @param int $partnerId Address book ID
+	 * @param string $partnerName Partner name (when not linking via partnerId)
+	 * @param string $partnerIco Partner ICO
+	 * @param string $partnerStreet Partner street
+	 * @param string $partnerCity Partner city
+	 * @param string $partnerZip Partner ZIP
+	 * @param string $symVar Variable symbol
+	 * @param string $symConst Constant symbol
+	 * @param string $symSpec Specific symbol
+	 * @param string $dateTax Tax date (YYYY-MM-DD)
+	 * @param string $dateAccounting Accounting date (YYYY-MM-DD)
+	 * @param string $dateDue Due date (YYYY-MM-DD)
+	 * @param string $dateDelivery Delivery date (YYYY-MM-DD)
+	 * @param string $paymentType draft, cash, card, compensation, or a payment-method IDS
+	 * @param string $accountIds Bank account IDS (see list_codebook bankAccount)
+	 * @param string $cashRegister Cash register IDS for a voucher (see list_codebook cashRegister)
+	 * @param string $accounting Pre-accounting IDS (e.g. "3FV")
+	 * @param string $classificationVAT VAT classification (e.g. inland, nonSubsume)
+	 * @param string $centre Centre IDS
+	 * @param string $activity Activity IDS
+	 * @param string $contract Contract IDS
+	 * @param string $note Note
+	 * @param string $intNote Internal note
+	 */
+	#[McpTool(
+		name: 'create_document',
+		title: 'Create Pohoda document (any agenda)',
+		annotations: new ToolAnnotations(destructiveHint: false, idempotentHint: false, openWorldHint: true),
+	)]
+	public function createDocument(
+		#[Schema(enum: self::WritableAgendas)]
+		string $agenda,
+		#[Schema(enum: self::DocumentTypes)]
+		string $type = '',
+		#[Schema(items: self::ItemSchema, description: 'Line items (omit for contract)')]
+		array $items = [],
+		string $number = '',
+		string $date = '',
+		string $text = '',
+		int $partnerId = 0,
+		string $partnerName = '',
+		string $partnerIco = '',
+		string $partnerStreet = '',
+		string $partnerCity = '',
+		string $partnerZip = '',
+		string $symVar = '',
+		string $symConst = '',
+		string $symSpec = '',
+		string $dateTax = '',
+		string $dateAccounting = '',
+		string $dateDue = '',
+		string $dateDelivery = '',
+		string $paymentType = '',
+		string $accountIds = '',
+		string $cashRegister = '',
+		string $accounting = '',
+		string $classificationVAT = '',
+		string $centre = '',
+		string $activity = '',
+		string $contract = '',
+		string $note = '',
+		string $intNote = '',
+	): string
+	{
+		$header = get_defined_vars();
+		unset($header['agenda'], $header['items']);
+		return self::json($this->assertOk($this->client->createDocument($agenda, $header, $items)));
+	}
+
+
+	/**
+	 * Update one existing Pohoda record (document, contact or stock item), selected by its Pohoda ID
+	 * (stock may use its code instead). Only the fields given change.
+	 * Document fields are the create_document parameters; contact fields: company, ico, dic, street, city, zip,
+	 * phone, email; stock fields: the create_stock parameters.
+	 *
+	 * @param int $id Pohoda record ID (from the list tools)
+	 * @param string $fields JSON object of the fields to change, e.g. {"text":"New text","dateDue":"2026-12-31"}
+	 * @param string $code Stock code, instead of id, for agenda stock
+	 */
+	#[McpTool(
+		name: 'update_record',
+		title: 'Update Pohoda record',
+		annotations: new ToolAnnotations(destructiveHint: true, idempotentHint: true, openWorldHint: true),
+	)]
+	public function updateRecord(
+		#[Schema(enum: [...self::WritableAgendas, 'addressbook', 'stock'])]
+		string $agenda,
+		string $fields,
+		int $id = 0,
+		string $code = '',
+	): string
+	{
+		$decoded = json_decode($fields, true);
+		if (!is_array($decoded) || array_is_list($decoded)) {
+			throw new ToolCallException('fields must be a JSON object of the fields to change.');
+		}
+		return self::json($this->assertOk($this->runClient(fn() => $this->client->updateRecord($agenda, $id, $decoded, $code))));
+	}
+
+
+	/**
+	 * Delete one Pohoda record (document, contact or stock item), selected by its Pohoda ID
+	 * (stock may use its code instead). Pohoda refuses a record that is already posted or linked.
+	 *
+	 * @param int $id Pohoda record ID (from the list tools)
+	 * @param string $code Stock code, instead of id, for agenda stock
+	 */
+	#[McpTool(
+		name: 'delete_record',
+		title: 'Delete Pohoda record',
+		annotations: new ToolAnnotations(destructiveHint: true, idempotentHint: true, openWorldHint: true),
+	)]
+	public function deleteRecord(
+		#[Schema(enum: [...self::WritableAgendas, 'addressbook', 'stock'])]
+		string $agenda,
+		int $id = 0,
+		string $code = '',
+	): string
+	{
+		return self::json($this->assertOk($this->runClient(fn() => $this->client->deleteRecord($agenda, $id, $code))));
+	}
+
+
+	/**
 	 * Print a record from Pohoda — either to a printer or as PDF (saved to a file on the mServer machine, optionally also returned as Base64).
 	 * The pdfPath is on the machine running mServer, not the Claude client.
 	 * Provide either pdfPath (PDF output) or printer (printer output); if neither is set, the default printer is used.
@@ -514,9 +690,13 @@ class McpTools
 				'tool' => 'list_contacts',
 				'agendas' => ['addressbook'],
 			],
-			'codebooks_only_via_raw_xml' => [
-				'tool' => 'raw_xml',
-				'agendas' => ['centre', 'activity', 'store', 'bankAccount', 'cashRegister', 'numericalSeries'],
+			'codebooks' => [
+				'tool' => 'list_codebook',
+				'agendas' => self::Codebooks,
+			],
+			'writable' => [
+				'tool' => 'create_document, update_record, delete_record',
+				'agendas' => [...self::WritableAgendas, 'addressbook', 'stock'],
 			],
 		];
 	}
@@ -601,10 +781,28 @@ class McpTools
 	private function assertOk(Response $response): array
 	{
 		$data = $response->toArray();
-		if (!$response->isOk()) {
-			throw new ToolCallException('Pohoda mServer returned error: ' . self::json($data));
+		$refused = array_filter($response->items, fn(ResponseItem $item) => $item->state === 'error');
+		if (!$response->isOk() || $refused) {
+			$notes = array_filter(array_map(fn(ResponseItem $item) => $item->note, $refused));
+			throw new ToolCallException('Pohoda mServer returned error'
+				. ($notes ? ': ' . implode('; ', $notes) : '')
+				. ' — ' . self::json($data));
 		}
 		return $data;
+	}
+
+
+	/**
+	 * Turns the client's argument refusal into a tool error the caller can read.
+	 * @param \Closure(): Response $call
+	 */
+	private function runClient(\Closure $call): Response
+	{
+		try {
+			return $call();
+		} catch (\InvalidArgumentException $e) {
+			throw new ToolCallException($e->getMessage());
+		}
 	}
 
 

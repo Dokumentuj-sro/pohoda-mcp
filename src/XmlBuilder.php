@@ -26,6 +26,18 @@ final class XmlBuilder
 		'lCon' => 'http://www.stormware.cz/schema/version_2/list_contract.xsd',
 		'lCen' => 'http://www.stormware.cz/schema/version_2/list_centre.xsd',
 		'lAcv' => 'http://www.stormware.cz/schema/version_2/list_activity.xsd',
+		'vch' => 'http://www.stormware.cz/schema/version_2/voucher.xsd',
+		'bnk' => 'http://www.stormware.cz/schema/version_2/bank.xsd',
+		'int' => 'http://www.stormware.cz/schema/version_2/intDoc.xsd',
+		'ofr' => 'http://www.stormware.cz/schema/version_2/offer.xsd',
+		'enq' => 'http://www.stormware.cz/schema/version_2/enquiry.xsd',
+		'con' => 'http://www.stormware.cz/schema/version_2/contract.xsd',
+		'ser' => 'http://www.stormware.cz/schema/version_2/service.xsd',
+		'pri' => 'http://www.stormware.cz/schema/version_2/prijemka.xsd',
+		'vyd' => 'http://www.stormware.cz/schema/version_2/vydejka.xsd',
+		'pro' => 'http://www.stormware.cz/schema/version_2/prodejka.xsd',
+		'pre' => 'http://www.stormware.cz/schema/version_2/prevodka.xsd',
+		'vyr' => 'http://www.stormware.cz/schema/version_2/vyroba.xsd',
 	];
 
 	/**

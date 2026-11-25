@@ -36,6 +36,50 @@ class PohodaClient
 		'numericalSeries' => ['listPrefix' => 'lst', 'listXsd' => 'list.xsd', 'listRequest' => 'listNumericalSeriesRequest', 'requestTag' => 'requestNumericalSeries', 'versionAttr' => 'numericalSeriesVersion'],
 		'centre' => ['listPrefix' => 'lCen', 'listXsd' => 'list_centre.xsd', 'listRequest' => 'listCentreRequest', 'requestTag' => 'requestCentre'],
 		'activity' => ['listPrefix' => 'lAcv', 'listXsd' => 'list_activity.xsd', 'listRequest' => 'listActivityRequest', 'requestTag' => 'requestActivity'],
+		'service' => ['listPrefix' => 'lst', 'listXsd' => 'list.xsd', 'listRequest' => 'listServiceRequest', 'requestTag' => 'requestService'],
+		'movement' => ['listPrefix' => 'lst', 'listXsd' => 'list.xsd', 'listRequest' => 'listMovementRequest', 'requestTag' => 'requestMovement'],
+		'classificationVAT' => ['listPrefix' => 'lst', 'listXsd' => 'list.xsd', 'listRequest' => 'listClassificationVATRequest', 'requestTag' => 'requestClassificationVAT'],
+		'payment' => ['listPrefix' => 'lst', 'listXsd' => 'list.xsd', 'listRequest' => 'listPaymentRequest', 'requestTag' => 'requestPayment'],
+		'storage' => ['listPrefix' => 'lst', 'listXsd' => 'list.xsd', 'listRequest' => 'listStorageRequest', 'requestTag' => 'requestStorage'],
+		'category' => ['listPrefix' => 'lst', 'listXsd' => 'list.xsd', 'listRequest' => 'listCategoryRequest', 'requestTag' => 'requestCategory'],
+		'accountingUnit' => ['listPrefix' => 'lst', 'listXsd' => 'list.xsd', 'listRequest' => 'listAccountingUnitRequest', 'requestTag' => 'requestAccountingUnit'],
+	];
+
+	/**
+	 * Document agendas {@see createDocument()}, {@see updateRecord()} and
+	 * {@see deleteRecord()} write: agenda => [namespace prefix, root element,
+	 * header element, has a `<p>:<root>Type` discriminator]. Structures follow
+	 * the Stormware XSDs (and the MIT-licensed pohoda-mcp by Hleb Tkachenko,
+	 * which mapped them first).
+	 */
+	public const DocumentAgendas = [
+		'invoice' => ['inv', 'invoice', 'invoiceHeader', true],
+		'order' => ['ord', 'order', 'orderHeader', true],
+		'voucher' => ['vch', 'voucher', 'voucherHeader', true],
+		'bank' => ['bnk', 'bank', 'bankHeader', true],
+		'intDoc' => ['int', 'intDoc', 'intDocHeader', false],
+		'offer' => ['ofr', 'offer', 'offerHeader', true],
+		'enquiry' => ['enq', 'enquiry', 'enquiryHeader', true],
+		'contract' => ['con', 'contract', 'contractDesc', false],
+		'service' => ['ser', 'service', 'serviceHeader', false],
+		'prijemka' => ['pri', 'prijemka', 'prijemkaHeader', false],
+		'vydejka' => ['vyd', 'vydejka', 'vydejkaHeader', false],
+		'prodejka' => ['pro', 'prodejka', 'prodejkaHeader', false],
+		'prevodka' => ['pre', 'prevodka', 'prevodkaHeader', false],
+		'vyroba' => ['vyr', 'vyroba', 'vyrobaHeader', false],
+		'addressbook' => ['adb', 'addressbook', 'addressbookHeader', false],
+		'stock' => ['stk', 'stock', 'stockHeader', false],
+	];
+
+	/**
+	 * Header fields in the XSD `xs:sequence` order the document headers share,
+	 * so one builder serves every agenda. A field an agenda does not define is
+	 * refused by mServer with a note naming it, which the caller sees verbatim.
+	 */
+	private const HeaderOrder = [
+		'cashRegister', 'bankAccount', 'number', 'symVar', 'date', 'datePayment', 'dateTax', 'dateAccounting',
+		'dateDue', 'dateDelivery', 'datePlan', 'accounting', 'classificationVAT', 'text', 'partnerIdentity',
+		'paymentType', 'account', 'symConst', 'symSpec', 'centre', 'activity', 'contract', 'note', 'intNote',
 	];
 	private string $authHeader;
 	private XmlBuilder $xml;
@@ -209,20 +253,7 @@ class PohodaClient
 	public function createAddress(array $data): Response
 	{
 		return $this->send('adb:addressbook', '2.0', [
-			'adb:addressbookHeader' => array_filter([
-				'adb:identity' => [
-					'typ:address' => array_filter([
-						'typ:company' => $data['company'] ?? '',
-						'typ:ico' => $data['ico'] ?? null,
-						'typ:dic' => $data['dic'] ?? null,
-						'typ:street' => $data['street'] ?? null,
-						'typ:city' => $data['city'] ?? null,
-						'typ:zip' => $data['zip'] ?? null,
-					], fn($v) => $v !== null && $v !== ''),
-				],
-				'adb:phone' => $data['phone'] ?? null,
-				'adb:email' => $data['email'] ?? null,
-			], fn($v) => $v !== null && $v !== ''),
+			'adb:addressbookHeader' => self::addressHeader($data),
 		], 'Create address');
 	}
 
@@ -232,36 +263,7 @@ class PohodaClient
 	 */
 	public function createStock(array $data): Response
 	{
-		$vatRate = $data['vatRate'] ?? 'high';
-
-		$header = array_filter([
-			'stk:stockType' => 'card',
-			'stk:code' => $data['code'],
-			'stk:EAN' => $data['EAN'] ?? null,
-			'stk:PLU' => ($data['PLU'] ?? 0) ?: null,
-			'stk:isSales' => $data['isSales'] ?? true,
-			'stk:isInternet' => $data['isInternet'] ?? false,
-			'stk:name' => $data['name'],
-			'stk:nameComplement' => $data['nameComplement'] ?? null,
-			'stk:unit' => $data['unit'] ?? 'ks',
-			'stk:storage' => self::ids($data['storage'] ?? ''),
-			'stk:sellingRateVAT' => $vatRate,
-			'stk:purchasingRateVAT' => $vatRate,
-			'stk:purchasingPrice' => ($data['purchasingPrice'] ?? 0) > 0 ? (float) $data['purchasingPrice'] : null,
-			'stk:sellingPrice' => (float) $data['sellingPrice'],
-			'stk:limitMin' => ($data['limitMin'] ?? 0) > 0 ? (float) $data['limitMin'] : null,
-			'stk:limitMax' => ($data['limitMax'] ?? 0) > 0 ? (float) $data['limitMax'] : null,
-			'stk:mass' => ($data['mass'] ?? 0) > 0 ? (float) $data['mass'] : null,
-			'stk:supplier' => ($data['supplierId'] ?? 0) > 0 ? ['typ:id' => (int) $data['supplierId']] : null,
-			'stk:shortName' => $data['shortName'] ?? null,
-			'stk:guaranteeType' => ($data['guarantee'] ?? 0) > 0 ? ($data['guaranteeType'] ?? 'year') : null,
-			'stk:guarantee' => ($data['guarantee'] ?? 0) > 0 ? (int) $data['guarantee'] : null,
-			'stk:description' => $data['description'] ?? null,
-			'stk:description2' => $data['description2'] ?? null,
-			'stk:note' => $data['note'] ?? null,
-		], fn($v) => $v !== null && $v !== '');
-
-		return $this->send('stk:stock', '2.0', ['stk:stockHeader' => $header], 'Create stock');
+		return $this->send('stk:stock', '2.0', ['stk:stockHeader' => self::stockHeader($data)], 'Create stock');
 	}
 
 
@@ -338,6 +340,67 @@ class PohodaClient
 
 
 	/**
+	 * Create a document in any agenda of {@see DocumentAgendas} (not addressbook
+	 * or stock, which have their own shapes).
+	 * @param array<string, mixed> $header  Keys: type, number, symVar, date, dateDue, text, partnerId|partnerName…, cashRegister, bankAccount, note, …
+	 * @param list<array<string, mixed>> $items  Each: text, quantity, unit, unitPrice, vatRate, stockCode
+	 */
+	public function createDocument(string $agenda, array $header, array $items = []): Response
+	{
+		[$p, $root, $headerTag] = self::documentAgenda($agenda);
+		if ($agenda === 'addressbook' || $agenda === 'stock') {
+			throw new \InvalidArgumentException("Use the dedicated $agenda create.");
+		}
+
+		$data = ["$p:$headerTag" => $this->documentHeader($agenda, $header)];
+		if ($items) {
+			$data["$p:{$root}Detail"] = array_map(fn(array $item) => ["$p:{$root}Item" => self::documentItem($p, $item)], $items);
+		}
+
+		return $this->send("$p:$root", '2.0', $data, "Create $agenda");
+	}
+
+
+	/**
+	 * Update one record, selected by its Pohoda ID (or by `code` for stock).
+	 * Only the fields given are sent; for addressbook and stock the keys are
+	 * those of {@see createAddress()} / {@see createStock()}.
+	 * @param array<string, mixed> $fields
+	 */
+	public function updateRecord(string $agenda, int $id, array $fields, string $code = ''): Response
+	{
+		[$p, $root, $headerTag] = self::documentAgenda($agenda);
+
+		$header = match ($agenda) {
+			'addressbook' => self::addressHeader($fields),
+			'stock' => self::stockHeader($fields, update: true),
+			default => $this->documentHeader($agenda, $fields, update: true),
+		};
+		if (!$header) {
+			throw new \InvalidArgumentException('Nothing to update: no fields given.');
+		}
+
+		return $this->send("$p:$root", '2.0', [
+			"$p:actionType" => ["$p:update" => self::recordFilter($id, $code)],
+			"$p:$headerTag" => $header,
+		], "Update $agenda");
+	}
+
+
+	/**
+	 * Delete one record, selected by its Pohoda ID (or by `code` for stock).
+	 */
+	public function deleteRecord(string $agenda, int $id, string $code = ''): Response
+	{
+		[$p, $root] = self::documentAgenda($agenda);
+
+		return $this->send("$p:$root", '2.0', [
+			"$p:actionType" => ["$p:delete" => self::recordFilter($id, $code)],
+		], "Delete $agenda");
+	}
+
+
+	/**
 	 * Send raw XML string as dataPackItem content.
 	 *
 	 * $period names the účetní období the import lands in; null leaves it to the
@@ -383,6 +446,164 @@ class PohodaClient
 	private static function ids(string $value): ?array
 	{
 		return $value !== '' ? ['typ:ids' => $value] : null;
+	}
+
+
+	/**
+	 * @return array{string, string, string, bool}
+	 */
+	private static function documentAgenda(string $agenda): array
+	{
+		return self::DocumentAgendas[$agenda]
+			?? throw new \InvalidArgumentException("Unknown agenda: $agenda. Supported: " . implode(', ', array_keys(self::DocumentAgendas)));
+	}
+
+
+	/**
+	 * @return array{'ftr:filter': array<string, int|string>}
+	 */
+	private static function recordFilter(int $id, string $code): array
+	{
+		if ($id > 0) {
+			return ['ftr:filter' => ['ftr:id' => $id]];
+		}
+		if ($code !== '') {
+			return ['ftr:filter' => ['ftr:code' => $code]];
+		}
+		throw new \InvalidArgumentException('Select the record by its Pohoda ID (or stock code).');
+	}
+
+
+	/**
+	 * @param array<string, mixed> $header
+	 * @return array<string, mixed>
+	 */
+	private function documentHeader(string $agenda, array $header, bool $update = false): array
+	{
+		[$p, $root, , $typed] = self::documentAgenda($agenda);
+		$str = fn(string $key): string => (string) ($header[$key] ?? '');
+
+		$values = [
+			'cashRegister' => self::ids($str('cashRegister')),
+			// a bank doklad names its own account early; every other agenda names the payment account after paymentType
+			'bankAccount' => $agenda === 'bank' ? self::ids($str('accountIds')) : null,
+			'number' => $str('number') !== '' ? ['typ:numberRequested' => $str('number')] : null,
+			'symVar' => $str('symVar'),
+			// a bank statement line has no `date`, its doklad date is `datePayment`
+			'date' => $agenda === 'bank' ? null : $str('date'),
+			'datePayment' => $agenda === 'bank' ? ($str('datePayment') ?: $str('date')) : $str('datePayment'),
+			'dateTax' => $str('dateTax'),
+			'dateAccounting' => $str('dateAccounting'),
+			'dateDue' => $str('dateDue'),
+			'dateDelivery' => $str('dateDelivery'),
+			'datePlan' => $str('datePlan'),
+			'accounting' => self::ids($str('accounting')),
+			'classificationVAT' => $str('classificationVAT') !== '' ? ['typ:classificationVATType' => $str('classificationVAT')] : null,
+			'text' => $str('text'),
+			'partnerIdentity' => self::buildPartnerIdentity($header),
+			'paymentType' => self::buildPaymentType($str('paymentType')),
+			'account' => $agenda === 'bank' ? null : self::ids($str('accountIds')),
+			'symConst' => $str('symConst'),
+			'symSpec' => $str('symSpec'),
+			'centre' => self::ids($str('centre')),
+			'activity' => self::ids($str('activity')),
+			'contract' => self::ids($str('contract')),
+			'note' => $str('note'),
+			'intNote' => $str('intNote'),
+		];
+
+		$result = [];
+		if ($typed && $str('type') !== '') {
+			$result["$p:{$root}Type"] = $str('type');
+		} elseif ($typed && !$update) {
+			throw new \InvalidArgumentException("A new $agenda needs its type.");
+		}
+		foreach (self::HeaderOrder as $field) {
+			$tag = ['bankAccount' => 'account', 'cashRegister' => 'cashAccount'][$field] ?? $field;
+			if ($values[$field] !== null && $values[$field] !== '') {
+				$result["$p:$tag"] = $values[$field];
+			}
+		}
+		return $result;
+	}
+
+
+	/**
+	 * @param array<string, mixed> $item
+	 * @return array<string, mixed>
+	 */
+	private static function documentItem(string $p, array $item): array
+	{
+		$code = (string) ($item['stockCode'] ?? '');
+		return array_filter([
+			"$p:text" => $item['text'] ?? null,
+			"$p:quantity" => (float) ($item['quantity'] ?? 1),
+			"$p:unit" => $item['unit'] ?? null,
+			"$p:rateVAT" => isset($item['unitPrice']) ? ($item['vatRate'] ?? 'high') : null,
+			"$p:homeCurrency" => isset($item['unitPrice']) ? ['typ:unitPrice' => (float) $item['unitPrice']] : null,
+			"$p:stockItem" => $code !== '' ? ['typ:stockItem' => ['typ:ids' => $code]] : null,
+		], fn($v) => $v !== null && $v !== '');
+	}
+
+
+	/**
+	 * @param array<string, mixed> $data  Keys: company, ico, dic, street, city, zip, phone, email
+	 * @return array<string, mixed>
+	 */
+	private static function addressHeader(array $data): array
+	{
+		$address = array_filter([
+			'typ:company' => $data['company'] ?? null,
+			'typ:ico' => $data['ico'] ?? null,
+			'typ:dic' => $data['dic'] ?? null,
+			'typ:street' => $data['street'] ?? null,
+			'typ:city' => $data['city'] ?? null,
+			'typ:zip' => $data['zip'] ?? null,
+		], fn($v) => $v !== null && $v !== '');
+
+		return array_filter([
+			'adb:identity' => $address ? ['typ:address' => $address] : null,
+			'adb:phone' => $data['phone'] ?? null,
+			'adb:email' => $data['email'] ?? null,
+		], fn($v) => $v !== null && $v !== '');
+	}
+
+
+	/**
+	 * @param array<string, mixed> $data
+	 * @return array<string, mixed>
+	 */
+	private static function stockHeader(array $data, bool $update = false): array
+	{
+		$vatRate = $data['vatRate'] ?? ($update ? null : 'high');
+		$positive = fn(string $key): ?float => ($data[$key] ?? 0) > 0 ? (float) $data[$key] : null;
+
+		return array_filter([
+			'stk:stockType' => $update ? null : 'card',
+			'stk:code' => $data['code'] ?? null,
+			'stk:EAN' => $data['EAN'] ?? null,
+			'stk:PLU' => ($data['PLU'] ?? 0) ?: null,
+			'stk:isSales' => $data['isSales'] ?? ($update ? null : true),
+			'stk:isInternet' => $data['isInternet'] ?? ($update ? null : false),
+			'stk:name' => $data['name'] ?? null,
+			'stk:nameComplement' => $data['nameComplement'] ?? null,
+			'stk:unit' => $data['unit'] ?? ($update ? null : 'ks'),
+			'stk:storage' => self::ids((string) ($data['storage'] ?? '')),
+			'stk:sellingRateVAT' => $vatRate,
+			'stk:purchasingRateVAT' => $vatRate,
+			'stk:purchasingPrice' => $positive('purchasingPrice'),
+			'stk:sellingPrice' => isset($data['sellingPrice']) ? (float) $data['sellingPrice'] : null,
+			'stk:limitMin' => $positive('limitMin'),
+			'stk:limitMax' => $positive('limitMax'),
+			'stk:mass' => $positive('mass'),
+			'stk:supplier' => ($data['supplierId'] ?? 0) > 0 ? ['typ:id' => (int) $data['supplierId']] : null,
+			'stk:shortName' => $data['shortName'] ?? null,
+			'stk:guaranteeType' => ($data['guarantee'] ?? 0) > 0 ? ($data['guaranteeType'] ?? 'year') : null,
+			'stk:guarantee' => ($data['guarantee'] ?? 0) > 0 ? (int) $data['guarantee'] : null,
+			'stk:description' => $data['description'] ?? null,
+			'stk:description2' => $data['description2'] ?? null,
+			'stk:note' => $data['note'] ?? null,
+		], fn($v) => $v !== null && $v !== '');
 	}
 
 
